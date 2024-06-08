@@ -6,3 +6,5 @@ Assignments from the course YSC2239 Introduction to Data Science taken as part o
 These assignments were completed in R Studio and written in R Markdown. 
 
 Each assignment folder contains both the R Markdown file and the PDF generated from the R Markdown file. 
+
+My answers to the two assessments and the files for our project are also contained in this repository. 
