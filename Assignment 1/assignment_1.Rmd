@@ -1,0 +1,84 @@
+---
+title: "Assignment 1"
+output: pdf_document
+date: "2023-08-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Sorting
+According to the R Documentation, `sort()` will sort a vector in ascending order. An example is seen below as required for the assignment. 
+```{r sorting}
+test <- c(0.1, 2.0, 1.3, 1.4)
+test_sorted <- sort(test)
+```
+On the other hand, `order()` returns the index of each element of each vectoe in sorted order. In other words, it sorts the vector and returns the index each element originally had before sorting. I have used this function to determine the required `positions`: 
+```{r ordering}
+positions <- order(test)
+```
+Lastly, `rank()` returns the index of each element in a vector as if it were already sorted. I included an example, for fun, below. 
+
+```{r ranking}
+rank(test)
+```
+
+It would be good to remember that `rank` returns the position of the element if it were already sorted, and `order` returns the order in which the elements should be sorted, the integers represent the original position of each element. 
+
+Below we have the second part of the first section of the assignment:
+```{r sorting_finish}
+test_positions <- test[positions]
+
+test_positions==test_sorted
+
+```
+Since everything returned `TRUE`, we know that `test_positions` matches `test_sorted` as required. 
+
+## [CRABS](https://youtu.be/LDU_Txk06tM?t=68) (click on the title for fun)
+ 
+```{r crabs_initial, echo = FALSE, results = 'hide'}
+library(MASS)
+crabs #columns: species, sex, index, frontal lobe size, rear width, carapace length, carapace width, body depth
+
+```
+Here we sort the crabs by frontal lobe size. Note that the original data frame was already sorted by frontal lobe size, but only by species. So, all blue crabs were sorted in ascending order by frontal lobe size, and then the orange crabs were sorted. Our sorting makes sure to compare all crabs regardless of its species. 
+```{r crabs_sorted}
+crabs_sorted <- crabs[order(crabs$FL),]
+```
+
+Now, we only care about the blue crabs, so we want to create a separate data frame consisting of only data for the blue crabs before we sort them in descending order. 
+```{r crabs_blue}
+crabs_blue <- crabs[crabs$sp == "B",]
+crabs_blue_sorted <- crabs_blue[order(crabs_blue$FL, decreasing = TRUE), ]
+```
+
+## Big Brains = Big [Butts](https://www.youtube.com/watch?v=7nprhxc2Lxc)? (Correlation not Causation!) 
+
+Here, we do the required ranking:
+```{r ranking_butts_brains}
+rank_brain <- rank(crabs$FL)
+rank_butt <- rank(crabs$RW)
+```
+
+And now we plot: 
+
+```{r plot_butts_brains, echo = FALSE}
+plot(rank_butt ~ rank_brain,
+     main = "Rear Width Sizes vs Frontal Lobe Sizes",
+     ylab = "Rear Width Sizes",
+     xlab = "Rear Width Sizes",
+     pch = 5,
+     col = "firebrick3")
+
+abline(lm(rank_butt ~ rank_brain), col = "goldenrod3")
+```
+
+Just for fun, I also added a best fit line in yellow. 
+
+And also for fun, calculated the correlation coefficient: 
+```{r correlation, echo = FALSE}
+cor(rank_brain, rank_butt, use = 'pairwise.complete.obs')
+```
+
+So, it seems that there is (?) a correlation, which makes sense since it likely has something to do with general growth and sizes of crabs. 

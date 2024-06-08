@@ -1,0 +1,105 @@
+---
+title: "lab 5"
+output: pdf_document
+date: "2023-10-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Ye Olde Faithful 
+
+Setting up the preliminaries, (i.e. reading the file)
+```{r prelims}
+faithful <- read.csv("./data/faithful.csv")
+duration <- faithful$duration
+wait <- faithful$wait 
+```
+
+Now, we check if the duration of the eruption and the waiting time are linearly related. Here, I'm assuming that we want to check if a longer duration of the eruption means a longer waiting time. So, waiting time is the "prediction" and duration of eruption is the "predictor". But I think it's possible to try to predict it the other way around too? Maybe a longer waiting time for the next eruption means the duration of the eruption will be longer. I'm not sure what this would change though but it seems like the lab is asking for the one I did so yay. 
+
+
+```{r linear, echo = FALSE}
+plot(duration, wait,
+     main = "Wait Time vs Duration of Eruption (In Minutes)",
+     ylab = "Wait Time (Mins)",
+     xlab = "Duration of Eruption (Mins)",
+     col = "cadetblue4",
+     pch = 4)
+```
+
+It does seem possible that the duration of eruption and the wait time are linearly related. This relation is a positive one, since it looks like the wait time is could be increasing as the duration of eruption increases.
+
+
+
+## Regressing to Before I Was a Geyser
+
+Performing a linear regression and storing it:
+
+```{r regression}
+linear_regression <- lm(wait~duration)
+coefficients <- linear_regression$coefficients
+```
+
+The coefficients are: 
+```{r coefficients, echo = FALSE}
+print(coefficients)
+```
+
+Rounded up to 3 s.f., the estimated intercept is `33.5` and the slope is `10.7`. The equation of the regression line would thus be `y = 10.7x + 33.5`, where `y` is the wait time and `x` is the duration of eruption. 
+
+Re-plotting and adding the line since I couldn't figure out a better way to organise this: 
+
+```{r reverse, echo=FALSE}
+plot(duration, wait,
+     main = "Wait Time vs Duration of Eruption (in Minutes)",
+     ylab = "Wait Time (Mins)",
+     xlab = "Duration of Eruption (Mins)",
+     col = "cadetblue4",
+     pch = 4)
+abline(linear_regression, 
+       col = "steelblue4")
+```
+
+Now we do everything again, but this time in standard units, and we also compute the correlation coefficient: 
+
+```{r standard_units}
+duration_su <- (duration - mean(duration))/sd(duration)
+wait_su <- (wait - mean(wait))/sd(wait)
+
+regression_su <- lm(wait_su~duration_su)
+coefficients_su <- regression_su$coefficients
+correlation_coefficient_su <- cor(duration_su, wait_su)
+``` 
+
+Rounding the slope and the correlation coefficient to 3 s.f., we see that: 
+
+```{r check_coefficients, echo = FALSE}
+slope_sf <- signif(coefficients_su[2], digits = 3)
+correlation_sf <- signif(correlation_coefficient_su, digits = 3)
+print(noquote(paste0("The slope is ", slope_sf, ", and the correlation coefficient is ",
+             correlation_sf, ".")))
+
+print(noquote(paste0("It is ", isTRUE(slope_sf == correlation_sf), " that the slope and the correlation coefficient are the same.")))
+```
+
+## Prediction 
+Calculating the prediction for 2 minutes and 5 minutes and printing out the required sentences:
+```{r predicting_wait, echo = FALSE}
+two_wait <- 10.7*2 + 33.5
+five_wait <- 10.7*5 + 33.5
+writeLines(noquote(paste0("After an eruption lasting 2 minutes,\n we predict that you’ll wait ", two_wait, 
+                      " minutes until the next eruption.")))
+writeLines(noquote(paste0("After an eruption lasting 5 minutes,\n we predict that you’ll wait ", five_wait, 
+                      " minutes until the next eruption.")))
+```
+
+
+Now, let's check the residuals: 
+
+```{r residuals, echo = FALSE}
+plot(linear_regression, which = 1)
+```
+
+It seems that the line isn't very straight, so our linear model was not reasonable. Perhaps it would have been better to do a regression for wait times below 70 minutes and wait times above 70 minutes, as it looks like there are two "clouds" of data points before and after the 70 minute point. 

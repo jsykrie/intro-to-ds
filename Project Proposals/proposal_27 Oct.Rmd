@@ -1,0 +1,366 @@
+---
+title: "Project Proposal"
+author: "Darryl, Eileen & Julene"
+date: "2023-10-24"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Chosen Dataset
+
+We have chosen the dataset titled "spotify songs", retrieved from **[Kaggle](https://www.kaggle.com/datasets/sujaykapadnis/spotify-songs)**. According to the dataset's webpage, the data was scrubbed using the `spotifyr` package.
+
+```{r data_exploration, echo = FALSE}
+spotify <- read.csv("../Data/spotify_songs.csv")
+length <- length(spotify)
+names <- names(spotify)
+rows <- nrow(spotify)
+```
+
+
+```{r print_length, echo = FALSE}
+print(paste0("There are ", length, " columns in the data set."))
+```
+Of which, 14 are possible predictors. They are:
+
+```{r print_names, echo = FALSE}
+print(names[c(3:4,12:length)])
+```
+
+
+```{r print_rows, echo = FALSE}
+print(paste0("There are ", rows, " observations included in the dataset, which is plenty for our purposes."))
+```
+
+# Research Questions
+Our possible research questions are as follows: 
+1. How does energy and danceability of the songs affect their popularity?
+
+2. Does the mode (major vs minor key) of the song affect the variance (mood evoked)?
+
+3. How does duration_ms and loudness of the songs affect its popularity?
+
+4. How has the average loudness of songs changed over time?
+
+It is also possible to generate more potential research questions if we use the following general template:
+
+How does `x, y, a, b,` and `c` affect `z`? 
+
+We can fill in possible independent variables for `x, y, a, b, c` and a possible dependent variable for `z`:
+. . . 
+
+# Exploration
+
+## Q1: How does energy and danceability of the songs affect their popularity?
+
+We will start exploring this question by plotting scatter plots of 2 variables at once, and then observing if there seems to be a relationship between the aforementioned variables. 
+
+Here, we have the plot of track popularity vs energy: 
+
+```{r q1_energy_pop_plots, echo = FALSE}
+library(ggplot2)
+ggplot(spotify, aes(x = energy, y = track_popularity)) +
+  geom_point(shape = 16, color = "cadetblue4") +
+  labs(title = "Plot of Track Popularity versus Energy Level",
+       x = "Energy Level",
+       y = "Track Popularity")
+```
+
+It is a bit hard to see the relationship with this many plot points. 
+
+Performing the linear regression and looking at the `R` and `R^2` values,
+
+```{r q1_reg_energy_pop}
+linreg_energy_pop <- lm(track_popularity ~ energy,
+             data = spotify)
+
+energy_cor_coef <- abs(cor(spotify$track_popularity, spotify$energy)) #0.109 
+energy_r2 <- summary(linreg_energy_pop)$r.squared # 0.01190533
+```
+
+```{r q1_reg_energy_print, echo = FALSE}
+print(paste0("The absolute value of the correlation coefficient is ", 
+             energy_cor_coef, "."))
+print(paste0("The value of R-squared is ", 
+             energy_r2, "."))
+```
+
+It seems like there is not a strong negative correlation between the two variables. This is supported by a low absolute correlation coefficient value of `0.109` and a low r-squared value of `0.0119`.
+
+``` {r q1_reg_energy_pop_plot, echo = FALSE}
+plot(linreg_energy_pop, which = c(1,2))
+```
+
+Looking at the residuals plot, it also does not seem like a linear model is the most appropriate, as the line isn't very straight. Looking at the Q-Q plot, we see that the line is not straight either. So, we might have to use a non-linear regression for this relationship. 
+
+Now, we look at the plot of popularity vs danceability: 
+
+```{r q1_dance_pop_plot, echo = FALSE}
+ggplot(spotify, aes(x = danceability, y = track_popularity)) +
+  geom_point(shape = 16, color = "slateblue4") +
+  labs(title = "Plot of Track Popularity versus Danceability of Song",
+       x = "Danceability of Song",
+       y = "Track Popularity of Song")
+```
+Again, it is a bit hard to see the relationship with this many plot points. 
+
+Performing the regression, 
+```{r q1_reg_dance_pop}
+linreg_dance_pop <- lm(track_popularity ~ danceability,
+             data = spotify)
+dance_cor_coef <- abs(cor(spotify$track_popularity, spotify$danceability)) #0.0647
+dance_r2 <- summary(linreg_dance_pop)$r.squared # 0.004192261
+```
+
+```{r q1_reg_dance_print, echo = FALSE}
+print(paste0("The absolute value of the correlation coefficient is ", 
+             dance_cor_coef, "."))
+print(paste0("The value of R-squared is ", 
+             dance_r2, "."))
+```
+
+Again, It seems like there is a very weak positive correlation between the two variables. This is supported by a low r-squared value of 0.00419 and a low correlation coefficient of 0.0647. 
+
+```{r q1_reg_dance_pop_plot, echo= FALSE}
+plot(linreg_dance_pop, which = c(1,2))
+```
+
+Looking at the residuals plot again, it seems like a linear model might not be the most appropriate as the line isn't very straight. When we look at the Q-Q plot, it seems even more evident that a different model is necessary, as most of the points do not lie on the straight line. 
+
+Finally, we plot energy versus danceability: 
+
+```{r q1_dance_energy_plot, echo = FALSE}
+ggplot(spotify, aes(x = danceability, y = energy)) +
+  geom_point(shape = 16, color = "cornflowerblue") +
+  labs(title = "Plot of Energy versus Danceability of Song",
+       x = "Danceability of sSong",
+       y = "Energy of Song")
+```
+
+It seems we definitely have to find a way to cut down on our data points a bit, as it is again hard to see any relation from the blue cloud above. 
+
+We perform another regression:
+```{r q1_reg_dance_energy}
+linreg_dance_energy <- lm(danceability ~ energy,
+             data = spotify)
+dance_energy_cor_coef <- abs(cor(spotify$energy, spotify$danceability)) #0.0861
+dance_energy_r2 <- summary(linreg_dance_energy)$r.squared # 0.007408588
+```
+
+```{r q1_reg_dance_energy_print, echo = FALSE}
+print(paste0("The absolute value of the correlation coefficient is ", 
+             dance_energy_cor_coef, "."))
+print(paste0("The value of R-squared is ", 
+             dance_energy_r2, "."))
+```
+
+It seems like there is a very weak positive correlation between the two variables. This is supported by a low r-squared value of 0.00741 and a low correlation coefficient of 0.0861. This is surprising because one would expect that songs that have higher energy would translate to a higher danceability (and conversely). Perhaps we should do analysis within individual playlist genres instead of across the entire data set. 
+
+```{r q1_reg_dance_energy_plot, echo = FALSE}
+plot(linreg_dance_energy, which= c(1,2))
+```
+
+Referencing the residuals plot, it seems like a linear model may not be a reasonable choice. However, looking at the Q-Q plot, more points seem to lie on the line compared to the previous two regressions. 
+
+A possible way to narrow our scope is to ask the same research question within different genres instead of across the whole data set. 
+
+## Q2 - Does the mode (major vs minor key) of the song affect the variance (mood evoked)?
+
+First, we sort the data into two data frames, one with all songs in major key, and one with all songs in minor key:
+```{r relationship_exploration_mode_valence}
+major <- spotify[spotify$mode == 1,]
+minor <- spotify[spotify$mode == 0,]
+```
+
+Now, we look at the spread of valence for songs in the two categories: 
+
+```{r relationship_exploration_mode_valence_plots, echo=FALSE}
+#setting transparent colours 
+slateblue <- rgb(71,60,139,max = 255, alpha = 80, names = "transparent.slateblue2")
+turquoise <- rgb(0,197,205, max = 255, alpha = 80, names = "transparent.turquoise3")
+
+major_hist <- hist(major$valence,
+                    plot = FALSE)
+minor_hist <- hist(minor$valence,
+                     plot = FALSE)
+
+plot(major_hist, 
+     col = slateblue,
+     main = "Histograms of Valence (Mood) for Songs in Major and Minor Modes",
+     xlab = "Valence",
+     xlim = c(0,1),
+     ylim = c(0,1400))
+plot(minor_hist, col = turquoise, add = TRUE)
+legend("topright", 
+       legend = c("Major", "Minor"),
+       col = c(slateblue, turquoise),
+       fill = c(slateblue, turquoise))
+
+```
+
+We originally hypothesised that songs in minor keys would have lower valence and songs in major keys would have higher valence. Looking at the overlaid histograms, it seems that this is highly unlikely to be true, as both histograms have the same general shape. If we move forward with this research question, perhaps we can again separate the data by `playlist_genre`, and look within each genre to see if the hypothesis holds true then. 
+
+## Q3 - How does duration_ms and loudness of the songs affect its popularity?
+
+Note that loudness is measured in decibels. 
+
+Once again, we will begin exploring the data set by plotting some scatter plots of each possible pair of variables involved. 
+
+```{r q3_duration_pop_plot, echo = FALSE}
+ggplot(spotify, aes(x = duration_ms, y = track_popularity)) +
+  geom_point(shape = 16, color = "deeppink4") +
+  labs(title = "Plot of Track Popularity against Duration of Song",
+       x = "Duration of Song",
+       y = "Track Popularity of Song")
+```
+
+We can't really see a relationship, but, from eyeballing, it seems that the majority of songs have a duration between 15000ms and 35000ms. 
+
+Performing linear regression, 
+```{r q3_reg_duration_pop}
+linreg_duration_pop <- lm(track_popularity ~ duration_ms,
+             data = spotify)
+duration_pop_cor_coef <- abs(cor(spotify$track_popularity, spotify$duration_ms)) #0.144
+duration_pop_r2 <- summary(linreg_duration_pop)$r.squared # 0.02064462
+```
+
+```{r q3_reg_duration_pop_print, echo = FALSE}
+print(paste0("The absolute value of the correlation coefficient is ", 
+             duration_pop_cor_coef, "."))
+print(paste0("The value of R-squared is ", 
+             duration_pop_r2, "."))
+```
+
+It seems like there is a very weak negative correlation between the two variables. This is supported by a low R-squared value of 0.0206 and a low absolute correlation coefficient of 0.144.
+
+```{r q3_reg_plot_duration_pop, echo = FALSE}
+plot(linreg_duration_pop, which = c(1,2))
+```
+
+Referencing the residuals plot, it seems like a linear model is not a reasonable choice, as the line is far from straight. 
+
+
+```{r q3_loud_pop_plot, echo = FALSE}
+ggplot(spotify, aes(x = loudness, y = track_popularity)) +
+  geom_point(shape = 16, color = "goldenrod3") +
+  labs(title = "Plot of Track Popularity against Loudness of song",
+       x = "Loudness of Song",
+       y = "Track Popularity of Song")
+```
+
+```{r q3_loud_pop_reg}
+linreg_loud_pop <- lm(track_popularity ~ loudness,
+             data = spotify)
+loud_pop_cor_coef <- cor(spotify$track_popularity, spotify$loudness) #0.0577
+loud_pop_r2 <- summary(linreg_loud_pop)$r.squared # 0.003327799
+```
+
+```{r q3_loud_pop_print, echo = FALSE}
+print(paste0("The absolute value of the correlation coefficient is ", 
+             loud_pop_cor_coef, "."))
+print(paste0("The value of R-squared is ", 
+             loud_pop_r2, "."))
+```
+
+It seems like there is a very weak positive correlation between the two variables. This is supported by a low r-squared value of 0.00333 and a low correlation coefficient of 0.0577.
+
+```{r q3_loud_pop_reg_plot, echo = FALSE}
+plot(linreg_loud_pop, which = c(1,2))
+```
+
+Referencing the residuals plot, it seems like a linear model is not a reasonable choice.
+
+It doesn't make a lot of sense to plot duration against loudness, as we do not expect there to be any relation between the two, but let's look at it anyway: 
+
+```{r q3_duration_loud_plot, echo = FALSE}
+ggplot(spotify, aes(x = loudness, y = duration_ms)) +
+  geom_point(shape = 16, color = "purple4") +
+  labs(title = "Plot of Duration versus Loudness of Song",
+       x = "Loudness of Song",
+       y = "Durationof Song")
+```
+
+As expected, we don't really see anything. 
+
+Performing linear regression, 
+```{r q3_reg_duration_loud}
+linreg_duration_loud <- lm(duration_ms ~ loudness,
+             data = spotify)
+duration_loud_cor_coef <- abs(cor(spotify$loudness, spotify$duration_ms)) #0.115
+duration_loud_r2 <- summary(linreg_duration_loud)$r.squared # 0.0132
+```
+
+```{r q3_reg_duration_loud_print, echo = FALSE}
+print(paste0("The absolute value of the correlation coefficient is ", 
+             duration_loud_cor_coef, "."))
+print(paste0("The value of R-squared is ", 
+             duration_loud_r2, "."))
+```
+
+Surprisingly, correlation coefficient of the two variables is higher than some of the other pairs of variables we tested earlier. It might be worth investigating what other factors might contribute to this relation. 
+
+```{r q3_reg_plot_duration_loud, echo = FALSE}
+plot(linreg_duration_loud, which = c(1,2))
+```
+
+However, looking at the residuals plot, a linear model is not the best for this. 
+
+## Q4 - How has the average loudness of songs changed over time?
+
+```{r exploration_loudness_plot, echo = FALSE}
+ggplot(spotify, aes(x = track_album_release_date, y = loudness)) +
+  geom_point(shape = 16, color = "palegreen4") +
+  labs(title = "Plot of Loudness of Song against Release Year",
+       x = "Release Year",
+       y = "Loudness of Song")
+```
+
+There seems to be a slight upwards trend in terms of average loudness of songs over time. This matches the reality of the "Loudness War" that has been going on in the music industry. It is also observed that the data points start to congregate more at a certain value and this may be due to streaming platforms imposing normalization to the uploaded songs that control the fluctuation in loudness values.
+
+
+# Proposed Timeline 
+
+Week 10 
+- Clarify questions and data sets (DONE)
+- Complete the requirements for the proposal (DONE)
+- Submit proposal (Will be done after we knit this file)
+
+Week 11
+- Ask prof for feedback on whether our questions are okay and pick one question 
+from the three 
+- Expand on what was done for proposal 
+- Finish up the coding by week 11
+
+Week 12 
+- Practice the presentation and prepare the presentation slides
+- Rehearse the presentation 
+- Seek feedback from professor if applicable
+
+# Teamwork
+
+As a team, we will come together to workshop the code, and discuss possible 
+interpretations of our results. We will split the work of preparing the presentation slides and combine our work. We will then make sure to discuss all the slides together to ensure we all know what's going on. 
+
+As individuals, Julene will focus on coding. Eileen will focus on
+interpreting the results from the code. Darryl will focus on drawing a 
+conclusion and identifying shortcomings, areas for improvement, and areas for
+future research.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

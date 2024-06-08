@@ -1,0 +1,143 @@
+---
+title: "lab_08"
+output: pdf_document
+date: "2023-11-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Preliminaries
+
+```{r prelims, echo = FALSE, message = FALSE}
+library(dplyr); library(magrittr); library(randomForest)
+nba <- read.csv("../data/nba.csv") 
+nba$WON <- ifelse(nba$WL == 'W',1,0)
+nba2 <- nba %>%
+group_by(GAME_ID) %>% mutate(FG_PCT_DIFF = -diff(FG_PCT),
+FT_PCT_DIFF = -diff(FT_PCT)) %>% slice(1) %>%
+ungroup() #View(nba2)
+
+#use later to predict
+range(nba2$FG_PCT_DIFF) #-0.251,0.281
+breaks_fg <- seq(-0.252, 0.282, length = 20) 
+range(nba2$FT_PCT_DIFF) #-0.625, 0.626
+breaks_ft <- seq(-0.626, 0.627)
+midpoints_fg <- breaks_fg + (breaks_fg[2]-breaks_fg[1])/2
+midpoints_fg <- midpoints_fg[-length(midpoints_fg)]
+midpoints_ft <- breaks_ft + (breaks_ft[2]-breaks_ft[1])/2
+midpoints_ft <- midpoints_ft[-length(midpoints_ft)]
+```
+
+## Logs Regression
+We perform a logistic regression here, with the intercept term and the `FT_PCT_DIFF` variable: 
+```{r logs_reg}
+fit.glm <- glm(WON ~ FG_PCT_DIFF + FT_PCT_DIFF, data = nba2,
+               family = binomial())
+
+summary(fit.glm)
+```
+
+Looking at the p-values, we see that the intercept term has a high p-value of 0.985, which is much greater than a 5% significance level. So, there is not enough evidence to reject the null hypothesis that the intercept is 0 when `FG_PCT_DIFF` and `FT_PCT_DIFF` have values of 0. 
+
+For the `FT_PCT_DIFF`, there is a very low p-value, of much less than 0.001, so there is enough evidence to reject the null hypothesis that the coefficient associated with `FT_PCT_DIFF` is 0. 
+
+So, we do not want to include the intercept, but we want to include `FT_PCT_DIFF`. 
+
+The appropriate equation is: chance of winning = 32.34(FG_PCT_DIFF) + 3.69(FT_PCT_DIFF), where the coefficients are rounded up to 2 d.p. 
+
+## Classifying with Probability
+```{r prob_to_class}
+
+p2class <- function(p, threshold) {
+  ifelse(p >= threshold, 1, 0)
+}
+```
+
+Here, we set up the grid and calculate the predicted classes using our grid: 
+```{r plot_setup}
+range(nba2$FG_PCT_DIFF)
+range(nba2$FT_PCT_DIFF)
+
+#setting up the axes 
+fg_grid <- seq(-0.25, 0.29, length=50)
+ft_grid <- seq(-0.63, 0.63, length=50)
+
+#setting up the grid
+two_variable_grid <- expand.grid(FG_PCT_DIFF = fg_grid, FT_PCT_DIFF = ft_grid)
+
+predicted_probabilities <- predict(fit.glm, newdata = two_variable_grid, type = "response")
+classes_0.3 <- p2class(predicted_probabilities, 0.3)
+classes_0.5 <- p2class(predicted_probabilities, 0.5)
+classes_0.7 <- p2class(predicted_probabilities, 0.7)
+```
+
+
+Below, we see the three required plots: 
+
+```{r plot, echo = FALSE}
+#picking some nice colours
+colours <- c("deeppink", "goldenrod" )
+colours_alt <- c("deeppink4", "goldenrod4")
+
+plot(two_variable_grid, 
+     main = "Decision Boundaries with T = 0.3",
+     col= colours_alt[as.factor(classes_0.3)],
+     pch = 3)
+points(nba2[, c("FG_PCT_DIFF", "FT_PCT_DIFF")], 
+       col = colours[as.factor(nba2$WON)],
+       pch = 8)
+
+plot(two_variable_grid, 
+     main = "Decision Boundaries with T = 0.5",
+     col= colours_alt[as.factor(classes_0.5)],
+     pch = 3)
+points(nba2[, c("FG_PCT_DIFF", "FT_PCT_DIFF")], 
+       col = colours[as.factor(nba2$WON)],
+       pch = 8)
+
+plot(two_variable_grid, 
+     main = "Decision Boundaries with T = 0.7",
+     col= colours_alt[as.factor(classes_0.7)],
+     pch = 3)
+points(nba2[, c("FG_PCT_DIFF", "FT_PCT_DIFF")], 
+       col = colours[as.factor(nba2$WON)],
+       pch = 8)
+```
+
+Looking at the three plots above, it seems like the decision boundary looks pretty linear on all three plots, and by eyeballing, they seem to have similar slopes. However, as the threshold increases, for each value of `FG_PCT_DIFF`, a higher value of `FT_PCT_DIFF` is necessary for the model to class a point as `1`, so the boundary "moves to the right" as the threshold increases. 
+
+## Helping Stop Deforestation
+
+Now, we grow a forest: 
+```{r forest}
+set.seed(2000)
+T <- 1000
+m <-2
+nba2$WON <- as.factor(nba2$WON)
+forest <- randomForest(WON ~ FG_PCT_DIFF + FT_PCT_DIFF, data = nba2, ntree = T, mtry = m)
+forest
+```
+
+The estimated accuracy of the forest is 77.8%. 
+
+```{r decision_boundary_forest, echo = FALSE}
+predicted_points <- predict(forest, newdata= two_variable_grid)
+plot(two_variable_grid, 
+     main = "Decision Boundaries of the Forest",
+     col= colours_alt[as.factor(predicted_points)],
+     pch = 3)
+points(nba2[, c("FG_PCT_DIFF", "FT_PCT_DIFF")], 
+       col = colours[as.factor(nba2$WON)],
+       pch = 8)
+```
+As we can see, the decision boundary no longer looks linear, compared to the plots from earlier. The boundary also looks less clean, as we can see two sections of pink in the yellow part of the grid near the top of the plot. 
+
+```{r forest_one}
+m <-1
+forest_1 <- randomForest(WON ~ FG_PCT_DIFF + FT_PCT_DIFF, data = nba2, ntree = T, mtry = m)
+forest_1
+```
+
+Repeating with only one variable tried at every split, we have a higher accuracy rate of 78.13%. We should do a hypothesis test to see if this increase in accuracy is significantly higher. 

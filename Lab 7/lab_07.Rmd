@@ -1,0 +1,171 @@
+---
+title: "lab_07"
+output: pdf_document
+date: "2023-11-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Preliminaries
+
+I've hidden the preliminaries as usual. You can see it in the `R` Markdown file. 
+```{r prelims, echo = FALSE, message = FALSE}
+library(ISLR2)
+library(glmnet)
+hitters <- Hitters
+head(hitters)
+```
+We have the first six rows of data above, and we already see an `NA` value in the first row. Looking at the whole data set, we see that all the `NA` values present are in the column `Salary`. This makes sense since maybe the players don't want to reveal their salaries/the salaries are not public knowledge. 
+
+Omitting the rows with missing data: 
+
+```{r omit}
+hitters <- na.omit(hitters)
+```
+
+Splitting the data into training and test sets: 
+
+```{r split}
+set.seed(333)
+nrows <- nrow(hitters)
+sample_rows <- sample(nrow(hitters), size=(0.3*nrows))
+X <- model.matrix(Salary ~., data = hitters)
+X <-X[,-1]
+train_x <- X[-sample_rows, ]
+test_x  <- X[sample_rows,]
+train_y <- hitters[-sample_rows, c("Salary")]
+test_y <- hitters[sample_rows, c("Salary")]
+```
+
+After visiting the peer tutor (Nihal) and consulting with some classmates, we realised that if we sampled the other way (i.e. choosing the size to be `0.7*nrows` and using the sampled rows as the training set instead of the test set), we do not get the expected result in the last question of this lab. (Basically, in the last question we ended up getting the result that the OLS model does second best, which isn't really what we wanted. If OLS is already second best then why did we go through all this trouble of learning lasso and ridge regressions?) 
+
+Anyway, we can just continue with the rest of the assignment. 
+
+Here, we perform the lasso regression: 
+```{r lasso}
+fit.lasso <- glmnet(train_x, train_y, alpha=1, standardize=TRUE) #remember to standardize!!!
+```
+
+Here, we find the required values from Q2: 
+```{r lasso_lambda}
+lambda_10 <- fit.lasso$lambda[10]
+lambda_50 <- fit.lasso$lambda[50]
+coef_10 <- coef(fit.lasso, s = lambda_10)
+coef_50 <- coef(fit.lasso, s = lambda_50)
+l1_10 <- sum(abs(coef_10[-1]))
+l1_50 <- sum(abs(coef_50[-1]))
+```
+
+The sum of the coefficients for the 50th value of $\lambda$ is larger. Since the 50th value of $\lambda = 2.998$, which is smaller than the 10th value of $\lambda$, the L1 norm can be larger, while still minimising the value of the objective function. 
+
+## Optimal $\lambda$
+
+In general, to find the optimal $\lambda$, we want to find the $\lambda$ that would give us the lowest possible value of the objective function for all potential values of $\lambda$. We can use cross-validation to help us with this task. If we only trained our model against one training set, we risk overfitting (i.e. capturing too much of the noise from the training set). Using cross-validation allows us to train our model against different samples (even though they all come from the same training set), so that we can produce a more accurate model (I think it's by taking the average of the errors produced by each model? But I am slightly confused so I hope my understanding is ok). So, by performing a cross-validated regression, we can find the optimal $\lambda$ which gives the minimum MSE.
+
+## Cross-Validation Time 
+
+Here, we perform the required cross-validated lasso regression: 
+```{r cv}
+set.seed(1)
+cv.lasso <- cv.glmnet(train_x, train_y, 
+                    alpha = 1,
+                    nfolds=20,
+                    standardize = TRUE)
+best_lambda <- cv.lasso$lambda.min
+lambda_1se <- cv.lasso$lambda.1se
+```
+
+```{r cv_words, echo = FALSE}
+print(paste0("The best lambda is ", best_lambda, "."))
+print(paste0("The lambda within one standard error of the lowest MSE is ", lambda_1se, "."))
+```
+
+Here is the plot of the model performance vs the value of $\lambda$:
+
+```{r cv_plot, echo = FALSE}
+plot(cv.lasso)
+```
+
+Basically, we want the $\lambda$ that gives us the global minimum in the plot above, which is the $\lambda$ that we stated above. 
+
+Here, we check the coefficients for each of the $\lambda$s as requested:
+```{r cv_coef}
+cv_coef_best <- coef(cv.lasso, s = best_lambda)
+cv_coef_1se <- coef(cv.lasso, s = lambda_1se)
+```
+
+Now, looking at the coefficients: 
+
+```{r cv_coef_print, echo = FALSE}
+print(cv_coef_best)
+print(cv_coef_1se)
+```
+
+As we can see, there are coefficients which are `0`. The variables which are selected would be the ones that are not `0`. 
+
+The variables which are selected for the best $\lambda$ are "Hits", "Runs", "RBI", "Walks", "CHits", "CRBI", "DivisionW", "PutOuts".
+
+The variables which are selected for the $\lambda$ within one standard error of the lowest MSE are "Hits", "Runs", "RBI", "CHits". 
+
+Now, we do the ridge regression: 
+```{r ridge}
+cv.ridge <- cv.glmnet(train_x, train_y, 
+                    alpha = 0,
+                    nfolds=20,
+                    standardize = TRUE)
+cv_ridge_lambda_1se <- cv.ridge$lambda.1se
+cv_coef_ridge_1se <- coef(cv.ridge, s = cv_ridge_lambda_1se)
+```
+
+Looking at the list of coefficients, 
+
+```{r ridge_print, echo = FALSE}
+print(cv_coef_ridge_1se)
+```
+
+none of the coefficients are exactly zero. 
+
+Here, we do the OLS fitting, as well as evaluate the performances of all of our models:
+
+```{r performance}
+lm_test <- hitters[sample_rows, ]
+fit.lm <- lm(Salary ~ . , data = hitters[-sample_rows,])
+predict_lm_y <- predict(fit.lm, new = hitters[sample_rows,])
+rmse_lm <- sqrt(mean((predict_lm_y - test_y)^2))
+predict_lasso_y <- predict(cv.lasso, newx = test_x, s = "lambda.min")
+rmse_lasso <- sqrt(mean((predict_lasso_y - test_y)^2))
+predict_ridge_y <- predict(cv.ridge, newx = test_x, s = "lambda.min")
+rmse_ridge <- sqrt(mean((predict_ridge_y - test_y)^2))
+```
+
+Now, our barplot: 
+
+```{r performance_plot, echo = FALSE}
+values <- c(rmse_lm, rmse_lasso, rmse_ridge)
+names <- c("OLS", "Lasso", "Ridge")
+barplot(values, 
+        names.arg = names, 
+        col = "hotpink2", 
+        main = "Plot of Relative Performance",
+        ylim = c(300, 330),
+        xpd = FALSE)
+```
+
+As expected, the linear model has the highest value of RMSE. OLS tends to overfit the data and not performing well. Ridge and lasso have better performances, as they are used for avoiding overfitting, which helps them to make more accurate predictions. 
+
+Below, I included another plot which doesn't cut off the bottom of the barplots, as I'm not sure if the above one is technically considered visual manipulation. I just wanted the differences to show up more clearly, but maybe the plot below is a better way of doing it: 
+
+```{r barplot_again, echo = FALSE}
+values <- c(rmse_lm, rmse_lasso, rmse_ridge)
+names <- c("OLS", "Lasso", "Ridge")
+barplot(values, 
+        names.arg = names, 
+        col = "indianred2", 
+        main = "Plot of Relative Performance",
+        ylim = c(0, 340))
+abline(h=rmse_lasso)
+```
+
+Or maybe not, since you can barely see that the ridge barplot ends below the line. 

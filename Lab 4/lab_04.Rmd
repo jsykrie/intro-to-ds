@@ -1,0 +1,105 @@
+---
+title: "lab_04"
+output: pdf_document
+date: "2023-09-21"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Vote Now for Your Favourite Thai Restaurant
+
+Here, we are reading the `.csv` file and determining the sample size we need:
+```{r preliminaries}
+real_votes <- read.csv("./data/votes.csv")
+sample_size <- nrow(real_votes)
+
+```
+
+
+Now, we write the required funciton that simulates one bootstrap sample and returns Imm Thai's percentage of votes:
+```{r bootstrapping_thai_once}
+one_resampled_percentage <- function(){
+  bootstrap <- real_votes[sample(sample_size, replace = TRUE),]
+  return((sum(bootstrap == "Imm Thai")/sample_size)*100)
+
+}
+```
+
+Now, we write the required function:
+```{r multiple_bootstrap}
+wrapper_percentage <- function(x){
+  one_resampled_percentage()
+}
+percentages_in_resamples <- function(m){
+  return(sapply(1:m, wrapper_percentage))
+}
+```
+
+Here, we simulate 2000 times as required, and find the lower and upper bounds for the 95%-confidence interval:
+```{r 2000_sim}
+so_many_sim <- percentages_in_resamples(2000)
+imm_lower_bound <- quantile(so_many_sim, 0.025)
+imm_upper_bound <- quantile(so_many_sim, 0.975)
+```
+
+Our histogram for the simulations:
+
+```{r hist_sim, echo = FALSE}
+hist(so_many_sim,
+     main = "Histogram of Imm Thai's Percentage of Votes",
+     xlab = "Imm Thai's Percentage of Votes",
+     col = "hotpink",
+     breaks = 15)
+abline(v = c(imm_lower_bound, imm_upper_bound), lwd = 3, col = "darkgoldenrod1")
+
+```
+
+## Imm (Thai) Doing So Much Better Than You
+
+Now, we write the function for calculating Imm Thai's lead over the other restaurants: 
+```{r difference}
+one_resampled_difference <- function() {
+  bootstrap <- real_votes[sample(sample_size, replace = TRUE),]
+  imm_thai_percentage <- (sum(bootstrap == "Imm Thai")/sample_size)*100
+  lucky_house_percentage <- (sum(bootstrap == "Lucky House")/sample_size)*100
+  thai_temple_percentage <- (sum(bootstrap == "Thai Temple")/sample_size)*100
+  thai_basil_percentage <- (sum(bootstrap == "Thai Basil")/sample_size)*100
+  return(imm_thai_percentage - (lucky_house_percentage
+                                + thai_temple_percentage 
+                                + thai_basil_percentage))
+}
+```
+
+Simulating 2000 times:
+```{r multi_difference}
+wrapper_difference <- function(x){
+  one_resampled_difference()
+}
+
+resampled_leads <- sapply(1:2000, wrapper_difference)
+```
+
+Finally, the required histogram, in a lovely blue:
+
+```{r hist_difference, echo = FALSE}
+hist(resampled_leads, 
+     main = "Histogram of 2000 Bootstrap Samples of Imm Thai's Lead",
+     xlab = "Leads",
+     col = "deepskyblue4",
+     breaks = 15,
+     xlim = c(-5,15))
+
+```
+
+And here is question 7: 
+```{r lead_ci, echo = FALSE}
+diff_lower <- quantile(resampled_leads, 0.025)
+diff_upper <- quantile(resampled_leads, 0.975)
+
+print(noquote(paste0(
+  "A 95%-CI for Imm Thai’s true lead over the other restaurants is (", round(diff_lower, digits = 2), ", ", round(diff_upper, digits = 2), ")."
+)))
+```
+

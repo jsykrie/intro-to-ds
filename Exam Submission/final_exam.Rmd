@@ -1,0 +1,224 @@
+---
+title: "final_exam"
+author: "Julene"
+date: "2023-12-05"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Climate Change Preliminaries 
+
+```{r load_libraries, echo = FALSE, message= FALSE}
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(randomForest)
+library(magrittr)
+library(ISLR2)
+library(glmnet)
+```
+
+```{r prelims, echo = FALSE}
+co2 <- read.csv("../data/CO2.txt", sep= " ")
+nrows <- nrow(co2)
+sample_rows <- sample(nrows, size=0.5*nrows)
+X <- model.matrix(y ~., data = co2) #still don't know what this is for
+X <-X[,-1] #to remove intercept
+Y <- co2[, c("y")]
+train_x <- X[sample_rows, ]
+test_x  <- X[-sample_rows,]
+train_y <- co2[sample_rows, c("y")]
+test_y <- co2[-sample_rows, c("y")]
+```
+
+```{r ols}
+ols <- lm(y ~., data = co2)
+summary(ols)$coefficients[,4]  
+```
+Looking at the coefficients of the OLS and their p-values, it seems possible that all the parameters other than x6 and x7 are 0, as their p-values are fairly high. (Assuming we are looking for significance level of 10%, if it is 5% I think x7 seems iffy too.) 
+
+## Regularised Regressions
+
+Since we want to reduce the number of variables in the model, we would want to use the lasso regression, as it will reduce some of the coefficients to 0. 
+ 
+Performing the regularisation with cross-validation on the entire set of data since I don't know what would be an appropriate test/train split, 
+```{r regularisation}
+cv.lasso <- cv.glmnet(X, Y, 
+                      alpha = 1,
+                      nfolds=20,
+                      standardize = TRUE)
+
+```
+
+
+
+```{r coefficients}
+coef(cv.lasso)
+```
+Well, I'm not sure what to do with this since basically all the coefficients are 0 except for x6 and we're supposed to have three variables so um. I'm just going to take the 3 that had the lowest p-values from the OLS. 
+
+```{r ols_again}
+ols2 <- lm(y ~x4 + x6 +x7, data = co2)
+summary(ols2)$coefficients[,4]
+```
+
+Looking at the p-values, it seems `x4` could still be 0. Let's remove it:
+
+```{r ols_again_again}
+ols3 <- lm(y ~ x6 +x7, data = co2)
+summary(ols3)$coefficients[,4]
+ols3$coefficients
+summary(ols)
+```
+Now, both x6 and x7 have p values lower than 0.05. Hence, I think this is the most appropriate model. The equation is y = 0.0185x6 + 2.19x7, rounding the coefficients to 3 s.f. The proportion of variance explained by this model is 72% (R^2 value when we look at the summary). 
+
+## Colonisation and Diabetes
+
+```{r diabetes_prelims, echo = FALSE}
+diabetes <- read.csv("../data/diabetes.csv")
+str(diabetes)
+```
+
+Looking at the structure of the dataset, we see that all columns except "BMI" and "DiabetesPedigreeFunction" are "integers", while the aforementioned columns are "numeric".
+
+```{r diabetes_split, echo = FALSE}
+set.seed(123)
+nrows <- nrow(diabetes)
+sample_rows <- sample(nrows, size=0.8*nrows)
+train <- diabetes[sample_rows, ]
+test  <- diabetes[-sample_rows,]
+train$Outcome <- as.factor(train$Outcome)
+test$Outcome <- as.factor(test$Outcome)
+```
+
+```{r tree_diabetes}
+tree_p <- rpart(Outcome ~., 
+                     data=train,
+                     method="class",   # "anova" for quantitative response
+                     cp = 0, minsplit = 1)  
+
+tree_perf <- function(treemodel, test, class_column) {
+  pred_class <- predict(treemodel, newdata=test, type='class')
+  con <- confusionMatrix(pred_class, test[[class_column]])
+  con$overall
+}
+tree_perf(tree_p, test, "Outcome")
+
+```
+
+The accuracy of the decision tree is about 69% (to 2 s.f.). 
+
+
+Ideally, I would use a for-loop to find and stire the accuracies of each forest, but I can't figure out what column or thing to call that would return me the accuracy. So, brute force it is. 
+```{r forest_diabetes}
+set.seed(213)
+T <- 500
+for (m in 1:8) {
+  return(randomForest(Outcome~., data = train, ntree = T, mtry = m))
+}
+forest <- randomForest(Outcome~., data = train, ntree = T, mtry = 1)
+set.seed(213)
+randomForest(Outcome~., data = train, ntree = T, mtry = 1) #25.24
+set.seed(213)
+randomForest(Outcome~., data = train, ntree = T, mtry = 2) #26.38
+set.seed(213)
+randomForest(Outcome~., data = train, ntree = T, mtry = 3) #24.59
+set.seed(213)
+randomForest(Outcome~., data = train, ntree = T, mtry = 4) #25.73
+set.seed(213)
+randomForest(Outcome~., data = train, ntree = T, mtry = 5) #25.41
+set.seed(213)
+randomForest(Outcome~., data = train, ntree = T, mtry = 6) #26.22
+set.seed(213)
+randomForest(Outcome~., data = train, ntree = T, mtry = 7) #24.92
+set.seed(213)
+randomForest(Outcome~., data = train, ntree = T, mtry = 8) #25.57
+
+```
+So, it seems that using only 3 variables considered at each split would be optimal, as it has the the lowest error rate and thus the highest accuracy rate. 
+
+Growing this forest, 
+```{r forest_stored}
+set.seed(213)
+forest <- randomForest(Outcome~., data = train, ntree = T, mtry = 3)
+print(forest)
+```
+We see that it has an accuracy rate of 75.41%. 
+
+OK so this doesn't work: 
+```{r logistic_diabetes}
+fit.glm_skin <- glm(Outcome ~., data = train,
+               family = binomial())
+fit.glm_skin
+train_no_skin <- train[, -4]
+fit.glm_no_skin <- glm(Outcome ~., data = train_no_skin,
+               family = binomial())
+
+range(diabetes$Pregnancies)
+range(diabetes$Glucose)
+range(diabetes$BloodPressure)
+range(diabetes$SkinThickness)
+range(diabetes$Insulin)
+range(diabetes$BMI)
+range(diabetes$DiabetesPedigreeFunction)
+range(diabetes$Age)
+pregnancies_grid <- seq(0, 17, length=20) 
+glucose_grid <- seq(0, 199, length = 20)
+bloodPressure_grid <- seq(0, 122, length=20) 
+skinThickness_grid <- seq(0, 99, length = 20)
+insulin_grid <- seq(0, 846, length = 20)
+bmi_grid <- seq(0, 67.1, length = 20)
+function_grid <- seq(0.078, 2.420, length = 20)
+age_grid <- seq(21, 81, length = 20)
+
+#setting up the grid
+#multi_variable_grid_skin <- expand.grid(Pregnancies = pregnancies_grid, Glucose = glucose_grid, BloodPressure= bloodPressure_grid, SkinThickness = skinThickness_grid, Insulin = insulin_grid, BMI = bmi_grid, DiabetesPedigreeFunction = function_grid, Age = age_grid)
+#multi_variable_grid <- expand.grid(Pregnancies = pregnancies_grid, Glucose = glucose_grid, BloodPressure= bloodPressure_grid, Insulin = insulin_grid, BMI = bmi_grid, DiabetesPedigreeFunction = function_grid, Age = age_grid)
+#predicted_probabilities_skin <- predict(fit.glm_skin, newdata = multi_variable_grid_skin, type = "response")
+#predicted_probabilities_no_skin <- predict(fit.glm_no_skin, newdata = multi_variable_grid, type = "response")
+
+```
+Just in case my code doesn't work, here's a sketch of what we're supposed to do for this question: 
+
+1. Conduct hypothesis test by shuffling the predicted responses for the models with and without SkinThickness. The test-statistic should be difference in RMSE. Calculate the difference between the two RMSEs and plot a histogram. If the original difference is very far from the middle of the histogram, then it is significant and we cannot remove SkinThickness. But otherwise, we can. 
+
+```{r simplify}
+fit.glm <- glm(Outcome ~ Pregnancies + Glucose + BloodPressure + Insulin + BMI + DiabetesPedigreeFunction + Age, data = train,
+               family = binomial())
+summary(fit.glm)$coefficients[,4]  
+```
+
+Looking at the p-values, we can probably remove insulin first. Age is probably the next to go. Let's repeat and check until all p-values <0.05.  
+
+```{r simplify_again}
+fit.glm <- glm(Outcome ~ Pregnancies + Glucose + BloodPressure + BMI + DiabetesPedigreeFunction + Age, data = train,
+               family = binomial())
+summary(fit.glm)$coefficients[,4]  
+
+fit.glm <- glm(Outcome ~ Pregnancies + Glucose + BloodPressure + BMI + DiabetesPedigreeFunction, data = train,
+               family = binomial())
+summary(fit.glm)$coefficients[,4]  
+fit.glm$coefficients
+```
+
+Ok this new one looks good. The equation of the resultant model is probability = sigma(0.148 pregnancies + 0.0349 glucose - 0.0120 bloodPressure + 0.0810 BMI + 0.765 DiabetesPedigreeFunction) = 1/(1+e^-the equation we just wrote). 
+
+```{r calc}
+odds <- 1/(1+exp(-0.148*3 - 0.0349*120 + 0.0120*70 - 0.0810*32 - 0.765*0.35))
+
+```
+
+The odds are 99.9% for this person. 
+
+```{r predict_log}
+predicted_probabilities <- predict(fit.glm, newdata = test, type = "response")
+```
+
+Ok I ran out of time so to outline the next steps for d and e pls give me some method marks T_T: 
+
+d. Convert the probabilities to classes using the ptoclass function from the last lab. Find the best threshold to use by finding the accuracies for each threshold and pick the one with the highest acccuracy. Then, do the barplot to compare the accuracies of each model. 
+
+e. The most performant would be the one with the highest accuracy. This method may or may not outperform the other two methods for different classification problems, as each method has its own pros and cons. Each method has different ways of determining the classes that suit diff problems. 

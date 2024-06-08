@@ -1,0 +1,229 @@
+---
+title: "lab_06"
+output: pdf_document
+date: "2023-10-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Exploration (Not as Fun as Wine Tasting) 
+
+I have hidden the preliminaries since it is literally just reading the `.csv` file and we've seen that a billion times now. 
+```{r preliminaries, echo = FALSE}
+wine <- read.csv("../data/wine_178.csv")
+```
+
+Below, we have the plot of Flavanoids and Ash, with their classes shown. 
+
+```{r plot_flav_ash, echo = FALSE}
+colours <- c("deeppink","slateblue", "goldenrod" )
+plot(wine[,c("Ash", "Flavanoids")], 
+     main = "Plot of Flavanoids vs Ash (With Classes)",
+     col = colours[as.factor(wine$Class)],
+     pch = 1)
+#Not sure why this syntax worked for changing the colours; it is copied from a stack exchange post: https://stackoverflow.com/questions/7466023/how-to-give-color-to-each-class-in-scatter-plot-in-r
+legend('topleft', 
+       legend = c("1", "2", "3"), 
+       col = colours,
+       pch = 1,
+       title = 'Class',
+       cex =.8)
+```
+
+The three classes of wine seem to be separated in "layers", with no overlap between classes 1 and 3 and slight overlap between classes 2 and 3. Class 1 and 2 seem to overlap greatly, and it looks like class 2 encompasses a wider range of Ash and Flavanoids, as seen by the point in the top right and bottom left corners. 
+
+```{r plot_hue_mag, echo = FALSE}
+plot(wine[,c("Hue", "Magnesium")], 
+     main = "Plot of Magnesium vs Hue (With Classes)",
+     col = colours[as.factor(wine$Class)],
+     pch = 5)
+#Not sure why this syntax worked for changing the colours; it is copied from a stack exchange post: https://stackoverflow.com/questions/7466023/how-to-give-color-to-each-class-in-scatter-plot-in-r
+legend('topleft', 
+       legend = c("1", "2", "3"), 
+       col = colours,
+       pch = 5,
+       title = 'Class',
+       cex =.8)
+```
+
+Compared to the previous plot, the boundaries of the classes here are less obvious. There is a lot of overlap of classes 1 and 2, with some overlap of classes 1 and 3, and classes 2 and 3. 
+
+## Standardising and Splitting 
+
+We use the standardise function from class and standardise all the columns below: 
+```{r standardise}
+standardise <- function(x) {
+  return((x - mean(x))/sd(x))
+}
+
+#so I can preserve the original data set 
+wine_su <- wine
+
+#applying to all the columns except the class column 
+wine_su[,-1] <- apply(wine[,-1], 2, standardise)
+```
+
+Now, we split our data set: 
+```{r split}
+set.seed(200)
+nrows <- nrow(wine_su)
+sample_rows <- sample(nrow(wine_su), size=nrows/2)
+train <- wine_su[sample_rows, ]
+test  <- wine_su[-sample_rows,]
+```
+
+Here, we have the first few rows of our training set: 
+```{r print_train, echo = FALSE}
+head(train)
+```
+
+## Training (to be a Sommelier?)
+
+First, we borrow all the functions from class. I have hidden them since it's just the functions we wrote in class, but trust me, they are there. 
+```{r classifier_functions, echo = FALSE}
+#functions from class
+#to calculate distance between two points
+distance <- function(p1, p2) {
+  sqrt( sum( (p1-p2)^2 ) )
+}
+
+closest_k <- function(data, p, k) {
+  xvars <- data[, !names(data) %in% 
+    c("Class")] # remove the class
+  distances <- apply(xvars, 1, function(row) distance(row, p))
+  # closest_row <- which.min(distances) only gives one row but we want the top 
+  #k rows with min distance
+  closest_rows <- order(distances)[1:k]
+  data[closest_rows, ]
+}
+
+majority <- function(classes) {
+  #tabulates number of each class
+  counts <- table(classes)
+  #returns the name of the class w/ max counts
+  majority_class <- names(counts)[which.max(counts)]
+  #turns colname back into integer
+  as.integer(majority_class)
+}
+
+classify_one_k <- function(data, p, k) {
+  classes <- closest_k(data, p, k)$Class
+  majority(classes)
+}
+
+#decided against setting a default, just feels cleaner.
+classify_k <- function(data, points, k=1) {
+  apply(points, 1, function(x) classify_one_k(data, x, k))
+}
+
+evaluate_k <- function(training_data, test_data, k=1) {
+  
+  actual_classes <- test_data$Class
+  test_data_x <- test_data[, !names(test_data) %in% 
+    c("Class")] # remove the actual classes
+  head(test_data_x)
+  estimated_classes <- classify_k(data = training_data, 
+                                  points = test_data_x,
+                                  k = k)
+  mean(estimated_classes == actual_classes)
+}
+```
+
+Now, we train a *k*-NN classifier using the Hue and Magnesium predictors. 
+
+```{r decision_boundaries_mag_hue_set_up }
+#checking the ranges we need
+range(train$Hue)
+range(train$Magnesium)
+
+#setting up the axes 
+hue_grid <- seq(-1.9, 3.3, length=50)
+magnesium_grid <- seq(-1.6, 4.4, length=50)
+
+#setting up the grid
+two_variable_grid <- expand.grid(Hue = hue_grid, Magnesium = magnesium_grid)
+
+classes_1 <- classify_k(data = train[, c("Hue", "Magnesium", "Class")], 
+         points = two_variable_grid, 1)
+classes_3 <- classify_k(data = train[, c("Hue", "Magnesium", "Class")], 
+         points = two_variable_grid, 3)
+classes_5 <- classify_k(data = train[, c("Hue", "Magnesium", "Class")], 
+         points = two_variable_grid, 5)
+colours_alt <- c("deeppink4", "slateblue4", "goldenrod4")
+```
+
+
+Here are the 3 plots required, with the training data overlaid on the decision boundary plots: 
+
+```{r decision_boundaries_plots, echo = FALSE}
+plot(two_variable_grid, 
+     main = "Decision Boundaries for Magnesium ansd Hue (k=1)",
+     col=colours_alt[as.factor(classes_1)],
+     pch = 3)
+points(train[, c("Hue", "Magnesium")], 
+       col = colours[as.factor(train$Class)],
+       pch = 8)
+
+plot(two_variable_grid, 
+     main = "Decision Boundaries for Magnesium ansd Hue (k=3)",
+     col=colours_alt[as.factor(classes_3)],
+     pch = 3)
+points(train[, c("Hue", "Magnesium")], 
+       col = colours[as.factor(train$Class)],
+       pch = 8)
+
+plot(two_variable_grid, 
+     main = "Decision Boundaries for Magnesium ansd Hue (k=5)",
+     col=colours_alt[as.factor(classes_5)],
+     pch = 3)
+
+points(train[, c("Hue", "Magnesium")], 
+       col = colours[as.factor(train$Class)],
+       pch = 8)
+```
+
+We find that:
+```{r print_performance_5, echo = FALSE}
+print(paste0("When k is 5, the accuracy is ",
+    signif(evaluate_k(train[,c("Hue", "Magnesium", "Class")], test[,c("Hue", "Magnesium", "Class")], 5), digits = 3)*100
+    ,"%."
+  ))
+```
+
+## More is Better?
+```{r more_predictors, echo = FALSE}
+print(paste0("For more predictors, when k is 5, the accuracy is ",
+    signif(evaluate_k(train[,c("Alcalinity.of.Ash", "Malic.Acid", "Hue", "Magnesium", "Class")], test[,c("Alcalinity.of.Ash", "Malic.Acid", "Hue", "Magnesium", "Class")], 5), digits = 3)*100
+    ,"%."
+  ))
+```
+
+It seems that with more predictors and the same choice of *k*, the accuracy of the classifier increases.
+
+```{r accuracy}
+k_breaks <- seq(1, 29, by=2)
+accuracies <- numeric(length(k_breaks))
+
+for (k in k_breaks) {
+  accuracies[(k+1)/2] <- evaluate_k(train[,c("Alcalinity.of.Ash", "Malic.Acid", 
+                                             "Hue", "Magnesium", "Class")],
+                                    test[,c("Alcalinity.of.Ash", "Malic.Acid", 
+                                            "Hue", "Magnesium", "Class")], k)
+}
+```
+
+
+Here is the plot of the percentage accuracy versus *k*: 
+
+```{r accuracy_plot, echo = FALSE}
+plot(k_breaks,accuracies,
+     main = "Percentage Accuracy vs k Values",
+     ylab = "Percentage Accuracies",
+     xlab = "k Values",
+     pch = 8,
+     col = "cadetblue4")
+```
+
+From the graph, there seems to be about 3 local maxima and 1 global maxima. The global maxima looks like it occurs around when *k* `=5`. It looks like the accuracy of the classifier drops after that, with some small increases in accuracy that never reach the same accuracy as before. 
